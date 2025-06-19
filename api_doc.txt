@@ -1,0 +1,115 @@
+GET
+Recent notable observations in a region
+https://api.ebird.org/v2/data/obs/{{regionCode}}/recent/notable
+Get the list of recent, notable observations (up to 30 days ago) of birds seen in a country, region or location.
+
+Notable observations can be for locally or nationally rare species or are otherwise unusual, e.g. over-wintering birds in a species which is normally only a summer visitor.
+
+URL parameters
+Name	Description
+regionCode	The country, subnational1, subnational2 or location code.
+Query parameters
+
+Name	Values	Default	Description
+back	1-30	14	The number of days back to fetch observations.
+detail	simple, full	simple	Include a subset (simple), or all (full), of the fields available.
+hotspot	true, false	false	Only fetch observations from hotspots.
+maxResults	1-10000	(all)	Only fetch this number of observations.
+r	any location code	(none)	Fetch observations from up to 10 locations.
+sppLocale	any available locale	en	Use this language for species common names.
+
+curl --location -g 'https://api.ebird.org/v2/data/obs/{{regionCode}}/recent/notable?detail=full' \
+--header 'X-eBirdApiToken: {{x-ebirdapitoken}}'
+
+[
+  {
+    "speciesCode": "libher",
+    "comName": "Little Blue Heron",
+    "sciName": "Egretta caerulea",
+    "locId": "L295658",
+    "locName": "Wallkill River NWR--Liberty Marsh (NY)",
+    "obsDt": "2017-08-23 10:11",
+    "howMany": 1,
+    "lat": 41.2833266,
+    "lng": -74.5262526,
+    "obsValid": false,
+    "obsReviewed": false,
+    "locationPrivate": false,
+    "subnational2Code": "US-NY-071",
+    "subnational2Name": "Orange",
+    "subnational1Code": "US-NY",
+    "subnational1Name": "New York",
+    "countryCode": "US",
+    "countryName": "United States",
+    "userDisplayName": "Kathleen Ashman",
+    "subId": "S38783126",
+    "obsId": "OBS527233428",
+    "checklistId": "CL22364",
+    "presenceNoted": false,
+    "hasComments": false,
+    "firstName": "Kathleen",
+    "lastName": "Astahman",
+    "hasRichMedia": false,
+    "locID": "L295658"
+  },
+  {
+    "speciesCode": "larspa",
+    "comName": "Lark Sparrow",
+    "sciName": "Chondestes grammacus",
+    "locId": "L109147",
+    "locName": "Jones Beach SP--West End",
+    "obsDt": "2017-08-23 10:00",
+    "howMany": 1,
+    "lat": 40.5786111,
+    "lng": -73.5727778,
+    "obsValid": true,
+    "obsReviewed": true,
+    "locationPrivate": false,
+    "subnational2Code": "US-NY-059",
+    "subnational2Name": "Nassau",
+    "subnational1Code": "US-NY",
+    "subnational1Name": "New York",
+    "countryCode": "US",
+    "countryName": "United States",
+    "userDisplayName": "Stacy Meyerheinrich",
+    "subId": "S38780649",
+    "obsId": "OBS527201666",
+    "checklistId": "CL22361",
+    "presenceNoted": false,
+    "hasComments": false,
+    "firstName": "Stacy",
+    "lastName": "Moyerhainrich",
+    "hasRichMedia": false,
+    "locID": "L109147"
+  },
+  {
+    "speciesCode": "libher",
+    "comName": "Little Blue Heron",
+    "sciName": "Egretta caerulea",
+    "locId": "L295658",
+    "locName": "Wallkill River NWR--Liberty Marsh (NY)",
+    "obsDt": "2017-08-23 09:00",
+    "howMany": 1,
+    "lat": 41.2833266,
+    "lng": -74.5262526,
+    "obsValid": false,
+    "obsReviewed": false,
+    "locationPrivate": false,
+    "subnational2Code": "US-NY-071",
+    "subnational2Name": "Orange",
+    "subnational1Code": "US-NY",
+    "subnational1Name": "New York",
+    "countryCode": "US",
+    "countryName": "United States",
+    "userDisplayName": "clay spencer",
+    "subId": "S38779435",
+    "obsId": "OBS527186633",
+    "checklistId": "CL22364",
+    "presenceNoted": false,
+    "hasComments": false,
+    "firstName": "clay",
+    "lastName": "spencer",
+    "hasRichMedia": false,
+    "locID": "L295658"
+  }
+]
