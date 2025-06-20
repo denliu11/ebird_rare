@@ -6,15 +6,26 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+/**
+ * Props for the Header component
+ */
 interface HeaderProps {
   onApiKeyChange?: (apiKey: string) => void
   currentApiKey?: string
 }
 
+/**
+ * Application header component with API key management
+ * Provides a clean interface for setting and updating the eBird API key
+ */
 export function Header({ onApiKeyChange, currentApiKey }: HeaderProps) {
+  // Local state for managing API key input
   const [apiKey, setApiKey] = useState(currentApiKey || '')
   const [isExpanded, setIsExpanded] = useState(false)
 
+  /**
+   * Handle API key form submission
+   */
   const handleApiKeySubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (apiKey.trim()) {
@@ -23,6 +34,9 @@ export function Header({ onApiKeyChange, currentApiKey }: HeaderProps) {
     }
   }
 
+  /**
+   * Handle Enter key press in API key input
+   */
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleApiKeySubmit(e as any)

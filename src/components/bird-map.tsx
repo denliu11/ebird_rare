@@ -5,10 +5,9 @@ import dynamic from 'next/dynamic'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { Icon } from 'leaflet'
 import { Bird, MapPin, Calendar, User, X, Code } from 'lucide-react'
-import { EBirdSighting, FilterOptions, UserLocation } from '@/types/ebird'
-import { ebirdApi } from '@/lib/ebird-api'
-import { formatDate, formatDistance, getRarityColor, getInitialMapCenter } from '@/lib/utils'
+import { formatDate, getInitialMapCenter } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { EBirdSighting, FilterOptions, UserLocation } from '@/types/ebird'
 
 // Dynamically import Leaflet components to avoid SSR issues
 const MapContainerDynamic = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.MapContainer })), {
@@ -27,7 +26,10 @@ const PopupDynamic = dynamic(() => import('react-leaflet').then(mod => ({ defaul
   ssr: false,
 })
 
-// Custom pin icon using the provided SVG
+/**
+ * Create a custom map pin icon using the provided SVG
+ * @returns Leaflet Icon instance
+ */
 const createCustomIcon = () => {
   return new Icon({
     iconUrl: '/pin.svg',
@@ -37,13 +39,20 @@ const createCustomIcon = () => {
   })
 }
 
+/**
+ * Props for the BirdMap component
+ */
 interface BirdMapProps {
   filters?: FilterOptions
   userLocation?: UserLocation
   apiKey?: string
   shouldFetchData?: boolean
+  onMapLoaded?: () => void
 }
 
+/**
+ * Component to update map view when center or bounds change
+ */
 function MapUpdater({ center, bounds }: { center?: [number, number], bounds?: [[number, number], [number, number]] }) {
   const map = useMap()
   
@@ -58,10 +67,13 @@ function MapUpdater({ center, bounds }: { center?: [number, number], bounds?: [[
   return null
 }
 
-// Detailed Sighting View Component
+/**
+ * Detailed view component for displaying comprehensive sighting information
+ */
 function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, onClose: () => void }) {
   return (
     <div className="h-full flex flex-col">
+      {/* Header with close button */}
       <div className="flex items-center justify-between p-4 border-b">
         <h3 className="text-lg font-semibold">Sighting Details</h3>
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -69,8 +81,9 @@ function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, 
         </Button>
       </div>
       
+      {/* Content area with scrollable details */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Basic Info */}
+        {/* Basic Information Section */}
         <div className="bg-muted p-3 rounded">
           <h4 className="font-medium mb-2">Basic Information</h4>
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -83,7 +96,7 @@ function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, 
           </div>
         </div>
 
-        {/* Coordinates */}
+        {/* Coordinates Section */}
         <div className="bg-muted p-3 rounded">
           <h4 className="font-medium mb-2">Coordinates</h4>
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -92,7 +105,7 @@ function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, 
           </div>
         </div>
 
-        {/* Validation Status */}
+        {/* Validation Status Section */}
         <div className="bg-muted p-3 rounded">
           <h4 className="font-medium mb-2">Validation Status</h4>
           <div className="flex gap-2">
@@ -112,7 +125,7 @@ function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, 
           </div>
         </div>
 
-        {/* Raw JSON Data */}
+        {/* Raw JSON Data Section */}
         <div className="bg-muted p-3 rounded">
           <div className="flex items-center justify-between mb-2">
             <h4 className="font-medium">Raw JSON Data</h4>
@@ -127,7 +140,12 @@ function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, 
   )
 }
 
-export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false }: BirdMapProps) {
+/**
+ * Main map component for displaying bird sightings
+ * Handles data fetching, map rendering, and user interactions
+ */
+export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false, onMapLoaded }: BirdMapProps) {
+  // State management
   const [sightings, setSightings] = useState<EBirdSighting[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -136,7 +154,9 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
   const [selectedSighting, setSelectedSighting] = useState<EBirdSighting | null>(null)
   const mapRef = useRef<any>(null)
 
-  // Calculate center and bounds from sightings
+  /**
+   * Calculate map bounds to fit all sightings with padding
+   */
   const calculateMapBounds = (sightings: EBirdSighting[]) => {
     if (sightings.length === 0) return undefined
 
@@ -158,6 +178,9 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
     ] as [[number, number], [number, number]]
   }
 
+  /**
+   * Calculate the center point of all sightings
+   */
   const calculateMapCenter = (sightings: EBirdSighting[]) => {
     if (sightings.length === 0) return getInitialMapCenter()
     
@@ -167,6 +190,7 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
     return [avgLat, avgLng] as [number, number]
   }
 
+  // Update map center when user location changes
   useEffect(() => {
     if (userLocation) {
       setMapCenter([userLocation.latitude, userLocation.longitude])
@@ -174,6 +198,7 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
     }
   }, [userLocation])
 
+  // Fetch sightings data when filters, API key, or fetch flag changes
   useEffect(() => {
     const fetchSightings = async () => {
       if (!filters || !apiKey || !shouldFetchData) return
@@ -182,19 +207,28 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
       setError(null)
       
       try {
+        // Import API client only on client side
+        const { ebirdApi } = await import('@/lib/ebird-api')
+        
         // Set the API key for this request
-        ebirdApi.setApiKey(apiKey)
-        
-        // Fetch notable observations using the new API structure
-        const data = await ebirdApi.getNotableObservations(filters.regionCode, filters)
-        setSightings(data)
-        
-        // Calculate new center and bounds based on the data
-        if (data.length > 0) {
-          const newCenter = calculateMapCenter(data)
-          const newBounds = calculateMapBounds(data)
-          setMapCenter(newCenter)
-          setMapBounds(newBounds)
+        // Only use API on client side
+        if (typeof window !== 'undefined') {
+          ebirdApi.setApiKey(apiKey)
+          
+          // Fetch notable observations using the new API structure
+          const data = await ebirdApi.getNotableObservations(filters.regionCode, filters)
+          setSightings(data)
+          
+          // Calculate new center and bounds based on the data
+          if (data.length > 0) {
+            const newCenter = calculateMapCenter(data)
+            const newBounds = calculateMapBounds(data)
+            setMapCenter(newCenter)
+            setMapBounds(newBounds)
+          }
+          
+          // Notify parent that map has loaded
+          onMapLoaded?.()
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch sightings')
@@ -205,25 +239,7 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
     }
 
     fetchSightings()
-  }, [filters, apiKey, shouldFetchData])
-
-  const handleLocationClick = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords
-          setMapCenter([latitude, longitude])
-          setMapBounds(undefined)
-        },
-        (error) => {
-          console.error('Error getting location:', error)
-          setError('Unable to get your location')
-        }
-      )
-    } else {
-      setError('Geolocation is not supported by this browser')
-    }
-  }
+  }, [filters, apiKey, shouldFetchData, onMapLoaded])
 
   if (!apiKey) {
     return (
@@ -280,18 +296,6 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
 
   return (
     <div className="relative h-full">
-      {/* Map Controls */}
-      <div className="absolute top-4 right-4 z-10 space-y-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleLocationClick}
-          className="bg-white/90 backdrop-blur"
-        >
-          <MapPin className="h-4 w-4" />
-        </Button>
-      </div>
-
       {/* Map Container */}
       <MapContainerDynamic
         ref={mapRef}
@@ -384,15 +388,6 @@ export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false
           </div>
         </div>
       )}
-
-      {/* Sightings Count */}
-      <div className="absolute bottom-4 left-4 z-10">
-        <div className="bg-white/90 backdrop-blur rounded-lg px-3 py-2 shadow-lg">
-          <p className="text-sm font-medium">
-            {sightings.length} sighting{sightings.length !== 1 ? 's' : ''} found
-          </p>
-        </div>
-      </div>
     </div>
   )
 } 

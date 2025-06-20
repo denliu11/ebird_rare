@@ -8,6 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FilterOptions } from '@/types/ebird'
 
+/**
+ * Props for the FilterPanel component
+ */
 interface FilterPanelProps {
   filters: FilterOptions
   onFiltersChange: (filters: FilterOptions) => void
@@ -15,7 +18,12 @@ interface FilterPanelProps {
   onResetFilters: () => void
 }
 
+/**
+ * Filter panel component for configuring eBird API query parameters
+ * Provides a user-friendly interface for setting region, time range, and other filters
+ */
 export function FilterPanel({ filters, onFiltersChange, onApplyFilters, onResetFilters }: FilterPanelProps) {
+  // Local state for managing filter changes before applying
   const [localFilters, setLocalFilters] = useState<FilterOptions>(filters)
 
   // Update local filters when props change
@@ -23,6 +31,9 @@ export function FilterPanel({ filters, onFiltersChange, onApplyFilters, onResetF
     setLocalFilters(filters)
   }, [filters])
 
+  /**
+   * Handle individual filter changes and notify parent
+   */
   const handleFilterChange = (key: keyof FilterOptions, value: any) => {
     const newFilters = { ...localFilters, [key]: value }
     setLocalFilters(newFilters)

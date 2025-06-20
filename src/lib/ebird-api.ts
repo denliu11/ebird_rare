@@ -1,4 +1,4 @@
-import { EBirdSighting, EBirdRareAlert, MapBounds, FilterOptions } from '@/types/ebird'
+import { EBirdSighting, FilterOptions } from '@/types/ebird'
 
 const EBIRD_API_BASE = 'https://api.ebird.org/v2'
 
@@ -7,6 +7,10 @@ interface EBirdApiConfig {
   baseUrl?: string
 }
 
+/**
+ * eBird API client for fetching bird sighting data
+ * Handles authentication, request proxying, and error handling
+ */
 class EBirdApiClient {
   private apiKey?: string
   private baseUrl: string
@@ -16,16 +20,26 @@ class EBirdApiClient {
     this.baseUrl = config.baseUrl || EBIRD_API_BASE
   }
 
+  /**
+   * Set the API key for authentication
+   */
   setApiKey(apiKey: string) {
     this.apiKey = apiKey
   }
 
+  /**
+   * Make a request to the eBird API through our proxy
+   * @param endpoint - API endpoint path
+   * @param params - Query parameters
+   * @returns Promise with the API response data
+   */
   private async makeRequest<T>(endpoint: string, params?: Record<string, string | number>): Promise<T> {
     if (!this.apiKey) {
       throw new Error('API key is required. Please add your eBird API key in the header.')
     }
 
     // Use the Next.js API route as a proxy to avoid CORS issues
+    // Construct the proxy URL - use relative URL which works in all contexts
     const proxyUrl = new URL('/api/ebird', window.location.origin)
     proxyUrl.searchParams.append('endpoint', endpoint)
     proxyUrl.searchParams.append('apiKey', this.apiKey)
@@ -39,6 +53,7 @@ class EBirdApiClient {
     }
 
     console.log('Making API request to proxy:', proxyUrl.toString())
+    console.log('API Key being used:', this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'not set')
 
     try {
       const response = await fetch(proxyUrl.toString(), {
@@ -49,10 +64,11 @@ class EBirdApiClient {
       })
 
       console.log('Response status:', response.status)
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
-        const errorData = await response.json()
-        console.error('API Error Response:', errorData)
+        const errorText = await response.text()
+        console.error('API Error Response:', response.status, errorText)
         
         if (response.status === 401) {
           throw new Error(`Invalid API key. Please check your eBird API key. Status: ${response.status}`)
@@ -61,12 +77,13 @@ class EBirdApiClient {
         } else if (response.status === 403) {
           throw new Error('Access forbidden. Please check your API key permissions.')
         } else {
-          throw new Error(`eBird API error: ${response.status} ${response.statusText}. Details: ${errorData.details || errorData.error}`)
+          throw new Error(`eBird API error: ${response.status} ${response.statusText}. Details: ${errorText}`)
         }
       }
 
       const data = await response.json()
-      console.log('API Response data:', data)
+      console.log('API Response data length:', Array.isArray(data) ? data.length : 'not an array')
+      console.log('API Response data sample:', Array.isArray(data) && data.length > 0 ? data[0] : data)
       return data
     } catch (error) {
       console.error('Fetch error:', error)
@@ -76,6 +93,9 @@ class EBirdApiClient {
 
   /**
    * Get recent notable observations in a region
+   * @param regionCode - eBird region code (e.g., 'US', 'US-NY')
+   * @param options - Filter options for the query
+   * @returns Promise with array of bird sightings
    */
   async getNotableObservations(
     regionCode: string,
@@ -100,68 +120,14 @@ class EBirdApiClient {
   }
 
   /**
-   * Get recent observations for a specific species
-   */
-  async getSpeciesObservations(
-    speciesCode: string,
-    regionCode: string,
-    options: Partial<FilterOptions> = {}
-  ): Promise<EBirdSighting[]> {
-    const params: Record<string, string | number> = {
-      back: options.back || 30,
-      detail: options.detail || 'full',
-      hotspot: String(options.hotspot || false),
-      sppLocale: options.sppLocale || 'en',
-    }
-
-    if (options.maxResults) {
-      params.maxResults = options.maxResults
-    }
-
-    if (options.r) {
-      params.r = options.r
-    }
-
-    return this.makeRequest<EBirdSighting[]>(`/data/obs/${regionCode}/recent/${speciesCode}`, params)
-  }
-
-  /**
-   * Get nearby hotspots
-   */
-  async getNearbyHotspots(
-    lat: number,
-    lng: number,
-    radius: number = 25
-  ): Promise<any[]> {
-    const params = {
-      lat: lat.toString(),
-      lng: lng.toString(),
-      r: radius.toString(),
-    }
-
-    return this.makeRequest<any[]>(`/ref/hotspot/geo`, params)
-  }
-
-  /**
-   * Get region info
-   */
-  async getRegionInfo(regionCode: string): Promise<any> {
-    return this.makeRequest<any>(`/ref/region/info/${regionCode}`)
-  }
-
-  /**
-   * Get species info
-   */
-  async getSpeciesInfo(speciesCode: string): Promise<any> {
-    return this.makeRequest<any>(`/ref/taxonomy/ebird/${speciesCode}`)
-  }
-
-  /**
    * Validate API key by making a simple request
+   * @returns Promise with boolean indicating if API key is valid
    */
   async validateApiKey(): Promise<boolean> {
     try {
       console.log('Validating API key...')
+      console.log('Current API key:', this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'not set')
+      
       // Try the notable observations endpoint as it's more reliable for validation
       const result = await this.makeRequest<any[]>('/data/obs/US/recent/notable?back=1&maxResults=1')
       console.log('API key validation successful:', result)
@@ -171,47 +137,39 @@ class EBirdApiClient {
       return false
     }
   }
-
-  /**
-   * Calculate distance between two points using Haversine formula
-   */
-  calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371 // Earth's radius in kilometers
-    const dLat = this.toRadians(lat2 - lat1)
-    const dLon = this.toRadians(lon2 - lon1)
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-  }
-
-  private toRadians(degrees: number): number {
-    return degrees * (Math.PI / 180)
-  }
-
-  /**
-   * Get observations within map bounds
-   */
-  async getObservationsInBounds(
-    bounds: MapBounds,
-    options: Partial<FilterOptions> = {}
-  ): Promise<EBirdSighting[]> {
-    // Note: eBird API doesn't directly support bounding box queries
-    // This would need to be implemented by querying multiple regions
-    // or using a different approach
-    
-    const centerLat = (bounds.north + bounds.south) / 2
-    const centerLng = (bounds.east + bounds.west) / 2
-    
-    // For now, we'll use a region-based approach
-    // You might want to implement a more sophisticated solution
-    return this.getNotableObservations('US', options)
-  }
 }
 
-// Create a singleton instance
-export const ebirdApi = new EBirdApiClient()
+// Create a singleton instance only on the client side
+let ebirdApiInstance: EBirdApiClient | null = null
+
+/**
+ * Get the eBird API client instance (client-side only)
+ */
+export function getEbirdApi(): EBirdApiClient {
+  if (typeof window === 'undefined') {
+    throw new Error('eBird API client can only be used on the client side')
+  }
+  
+  if (!ebirdApiInstance) {
+    ebirdApiInstance = new EBirdApiClient()
+  }
+  return ebirdApiInstance
+}
+
+// Export a function to get the API instance instead of a direct instance
+export const ebirdApi = {
+  setApiKey: (apiKey: string) => {
+    if (typeof window === 'undefined') return
+    getEbirdApi().setApiKey(apiKey)
+  },
+  getNotableObservations: async (regionCode: string, options?: Partial<FilterOptions>) => {
+    if (typeof window === 'undefined') throw new Error('API can only be used on client side')
+    return getEbirdApi().getNotableObservations(regionCode, options)
+  },
+  validateApiKey: async () => {
+    if (typeof window === 'undefined') return false
+    return getEbirdApi().validateApiKey()
+  },
+}
 
 export default EBirdApiClient 

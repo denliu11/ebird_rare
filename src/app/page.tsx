@@ -1,46 +1,77 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Suspense } from 'react'
-import { BirdMap } from '@/components/bird-map'
+import dynamic from 'next/dynamic'
 import { FilterPanel } from '@/components/filter-panel'
 import { Header } from '@/components/header'
 import { LoadingSpinner } from '@/components/loading-spinner'
 import { FilterOptions, ApiKeyState } from '@/types/ebird'
-import { ebirdApi } from '@/lib/ebird-api'
 
+// Dynamically import BirdMap to avoid SSR issues
+const BirdMap = dynamic(() => import('@/components/bird-map').then(mod => ({ default: mod.BirdMap })), {
+  ssr: false,
+  loading: () => <LoadingSpinner />
+})
+
+/**
+ * Default filter configuration
+ */
+const DEFAULT_FILTERS: FilterOptions = {
+  regionCode: 'US',
+  back: 14,
+  detail: 'full',
+  hotspot: false,
+  sppLocale: 'en',
+}
+
+/**
+ * Main application page component
+ * Manages API key validation, filter state, and data fetching coordination
+ */
 export default function HomePage() {
+  // API key state management
   const [apiKeyState, setApiKeyState] = useState<ApiKeyState>({
     apiKey: '',
     isValid: false,
   })
-  const [currentFilters, setCurrentFilters] = useState<FilterOptions>({
-    regionCode: 'US',
-    back: 14,
-    detail: 'full',
-    hotspot: false,
-    sppLocale: 'en',
-  })
-  const [pendingFilters, setPendingFilters] = useState<FilterOptions>({
-    regionCode: 'US',
-    back: 14,
-    detail: 'full',
-    hotspot: false,
-    sppLocale: 'en',
-  })
+  
+  // Filter state management
+  const [currentFilters, setCurrentFilters] = useState<FilterOptions>(DEFAULT_FILTERS)
+  const [pendingFilters, setPendingFilters] = useState<FilterOptions>(DEFAULT_FILTERS)
+  
+  // Data fetching state
   const [shouldFetchData, setShouldFetchData] = useState(false)
+  const [mapLoaded, setMapLoaded] = useState(false)
 
+  /**
+   * Handle API key changes and validate the key
+   */
   const handleApiKeyChange = async (apiKey: string) => {
     console.log('API key changed:', apiKey ? `${apiKey.substring(0, 8)}...` : 'empty')
     setApiKeyState({ apiKey, isValid: false, error: undefined })
+    setMapLoaded(false) // Reset map loaded state when API key changes
     
     if (apiKey.trim()) {
       try {
         console.log('Setting API key and validating...')
-        ebirdApi.setApiKey(apiKey)
-        const isValid = await ebirdApi.validateApiKey()
-        console.log('API key validation result:', isValid)
-        setApiKeyState({ apiKey, isValid, error: isValid ? undefined : 'Invalid API key' })
+        console.log('API key to validate:', apiKey)
+        
+        // Only use API on client side
+        if (typeof window !== 'undefined') {
+          // Import API client only on client side
+          const { ebirdApi } = await import('@/lib/ebird-api')
+          console.log('API client imported successfully')
+          
+          ebirdApi.setApiKey(apiKey)
+          console.log('API key set, now validating...')
+          
+          const isValid = await ebirdApi.validateApiKey()
+          console.log('API key validation result:', isValid)
+          setApiKeyState({ apiKey, isValid, error: isValid ? undefined : 'Invalid API key' })
+        } else {
+          console.log('Not in browser environment, skipping API validation')
+        }
       } catch (error) {
         console.error('API key validation error:', error)
         setApiKeyState({ 
@@ -52,27 +83,38 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Handle filter changes (updates pending filters)
+   */
   const handleFiltersChange = (newFilters: FilterOptions) => {
     setPendingFilters(newFilters)
     setShouldFetchData(false) // Reset fetch flag when filters change
   }
 
+  /**
+   * Apply pending filters and trigger data fetch
+   */
   const handleApplyFilters = () => {
     setCurrentFilters(pendingFilters)
     setShouldFetchData(true)
+    setMapLoaded(false) // Reset map loaded state when filters are applied
   }
 
+  /**
+   * Reset filters to default values
+   */
   const handleResetFilters = () => {
-    const defaultFilters: FilterOptions = {
-      regionCode: 'US',
-      back: 14,
-      detail: 'full',
-      hotspot: false,
-      sppLocale: 'en',
-    }
-    setPendingFilters(defaultFilters)
-    setCurrentFilters(defaultFilters)
+    setPendingFilters(DEFAULT_FILTERS)
+    setCurrentFilters(DEFAULT_FILTERS)
     setShouldFetchData(true)
+    setMapLoaded(false) // Reset map loaded state when filters are reset
+  }
+
+  /**
+   * Handle map loaded event
+   */
+  const handleMapLoaded = () => {
+    setMapLoaded(true)
   }
 
   return (
@@ -100,29 +142,20 @@ export default function HomePage() {
               filters={currentFilters}
               apiKey={apiKeyState.isValid ? apiKeyState.apiKey : undefined}
               shouldFetchData={shouldFetchData}
+              onMapLoaded={handleMapLoaded}
             />
           </Suspense>
         </div>
       </main>
 
       {/* API Key Error Display */}
-      {apiKeyState.error && (
+      {apiKeyState.error && !mapLoaded && (
         <div className="fixed bottom-4 right-4 bg-destructive text-destructive-foreground px-4 py-2 rounded-lg shadow-lg max-w-md">
           <p className="text-sm font-medium">API Key Error</p>
           <p className="text-xs mt-1">{apiKeyState.error}</p>
           <p className="text-xs mt-2 opacity-75">
             Check the browser console for detailed error information.
           </p>
-        </div>
-      )}
-
-      {/* Debug Info (only in development) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed top-20 right-4 bg-muted text-muted-foreground px-3 py-2 rounded text-xs">
-          <p>API Key: {apiKeyState.apiKey ? 'Set' : 'Not set'}</p>
-          <p>Valid: {apiKeyState.isValid ? 'Yes' : 'No'}</p>
-          <p>Error: {apiKeyState.error || 'None'}</p>
-          <p>Should Fetch: {shouldFetchData ? 'Yes' : 'No'}</p>
         </div>
       )}
     </div>

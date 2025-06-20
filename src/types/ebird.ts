@@ -16,6 +16,9 @@ export interface EBirdLocation {
   hierarchicalName: string
 }
 
+/**
+ * Bird sighting data from eBird API
+ */
 export interface EBirdSighting {
   speciesCode: string
   comName: string
@@ -78,12 +81,18 @@ export interface MapBounds {
   west: number
 }
 
+/**
+ * User's current location coordinates
+ */
 export interface UserLocation {
   latitude: number
   longitude: number
   accuracy?: number
 }
 
+/**
+ * Filter options for eBird API queries
+ */
 export interface FilterOptions {
   regionCode: string
   back: number
@@ -94,6 +103,9 @@ export interface FilterOptions {
   sppLocale: string
 }
 
+/**
+ * API key validation state
+ */
 export interface ApiKeyState {
   apiKey: string
   isValid: boolean
