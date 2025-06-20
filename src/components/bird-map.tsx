@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { Icon } from 'leaflet'
-import { Bird, MapPin, Calendar, User } from 'lucide-react'
+import { Bird, MapPin, Calendar, User, X, Code } from 'lucide-react'
 import { EBirdSighting, FilterOptions, UserLocation } from '@/types/ebird'
 import { ebirdApi } from '@/lib/ebird-api'
 import { formatDate, formatDistance, getRarityColor, getInitialMapCenter } from '@/lib/utils'
@@ -27,15 +27,13 @@ const PopupDynamic = dynamic(() => import('react-leaflet').then(mod => ({ defaul
   ssr: false,
 })
 
-// Custom marker icon
-const createCustomIcon = (rarity: string) => {
+// Custom pin icon using the provided SVG
+const createCustomIcon = () => {
   return new Icon({
-    iconUrl: `/markers/${rarity}-marker.png`,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowUrl: '/markers/marker-shadow.png',
-    shadowSize: [41, 41],
+    iconUrl: '/pin.svg',
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32],
   })
 }
 
@@ -43,34 +41,142 @@ interface BirdMapProps {
   filters?: FilterOptions
   userLocation?: UserLocation
   apiKey?: string
+  shouldFetchData?: boolean
 }
 
-function MapUpdater({ center }: { center: [number, number] }) {
+function MapUpdater({ center, bounds }: { center?: [number, number], bounds?: [[number, number], [number, number]] }) {
   const map = useMap()
   
   useEffect(() => {
-    map.setView(center, map.getZoom())
-  }, [center, map])
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [20, 20] })
+    } else if (center) {
+      map.setView(center, map.getZoom())
+    }
+  }, [center, bounds, map])
   
   return null
 }
 
-export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
+// Detailed Sighting View Component
+function DetailedSightingView({ sighting, onClose }: { sighting: EBirdSighting, onClose: () => void }) {
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center justify-between p-4 border-b">
+        <h3 className="text-lg font-semibold">Sighting Details</h3>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Basic Info */}
+        <div className="bg-muted p-3 rounded">
+          <h4 className="font-medium mb-2">Basic Information</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div><span className="font-medium">Species:</span> {sighting.comName}</div>
+            <div><span className="font-medium">Scientific:</span> {sighting.sciName}</div>
+            <div><span className="font-medium">Location:</span> {sighting.locName}</div>
+            <div><span className="font-medium">Date:</span> {formatDate(sighting.obsDt)}</div>
+            <div><span className="font-medium">Observer:</span> {sighting.userDisplayName}</div>
+            <div><span className="font-medium">Count:</span> {sighting.howMany || 'Not specified'}</div>
+          </div>
+        </div>
+
+        {/* Coordinates */}
+        <div className="bg-muted p-3 rounded">
+          <h4 className="font-medium mb-2">Coordinates</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div><span className="font-medium">Latitude:</span> {sighting.lat}</div>
+            <div><span className="font-medium">Longitude:</span> {sighting.lng}</div>
+          </div>
+        </div>
+
+        {/* Validation Status */}
+        <div className="bg-muted p-3 rounded">
+          <h4 className="font-medium mb-2">Validation Status</h4>
+          <div className="flex gap-2">
+            <span className={`px-2 py-1 rounded text-xs ${sighting.obsValid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+              {sighting.obsValid ? 'Valid' : 'Unvalidated'}
+            </span>
+            {sighting.obsReviewed && (
+              <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
+                Reviewed
+              </span>
+            )}
+            {sighting.locationPrivate && (
+              <span className="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">
+                Private Location
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Raw JSON Data */}
+        <div className="bg-muted p-3 rounded">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-medium">Raw JSON Data</h4>
+            <Code className="h-4 w-4" />
+          </div>
+          <pre className="text-xs bg-background p-2 rounded overflow-x-auto">
+            {JSON.stringify(sighting, null, 2)}
+          </pre>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function BirdMap({ filters, userLocation, apiKey, shouldFetchData = false }: BirdMapProps) {
   const [sightings, setSightings] = useState<EBirdSighting[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mapCenter, setMapCenter] = useState<[number, number]>(getInitialMapCenter())
+  const [mapBounds, setMapBounds] = useState<[[number, number], [number, number]] | undefined>()
+  const [selectedSighting, setSelectedSighting] = useState<EBirdSighting | null>(null)
   const mapRef = useRef<any>(null)
+
+  // Calculate center and bounds from sightings
+  const calculateMapBounds = (sightings: EBirdSighting[]) => {
+    if (sightings.length === 0) return undefined
+
+    const lats = sightings.map(s => s.lat)
+    const lngs = sightings.map(s => s.lng)
+    
+    const minLat = Math.min(...lats)
+    const maxLat = Math.max(...lats)
+    const minLng = Math.min(...lngs)
+    const maxLng = Math.max(...lngs)
+    
+    // Add some padding to the bounds
+    const latPadding = (maxLat - minLat) * 0.1
+    const lngPadding = (maxLng - minLng) * 0.1
+    
+    return [
+      [minLat - latPadding, minLng - lngPadding],
+      [maxLat + latPadding, maxLng + lngPadding]
+    ] as [[number, number], [number, number]]
+  }
+
+  const calculateMapCenter = (sightings: EBirdSighting[]) => {
+    if (sightings.length === 0) return getInitialMapCenter()
+    
+    const avgLat = sightings.reduce((sum, s) => sum + s.lat, 0) / sightings.length
+    const avgLng = sightings.reduce((sum, s) => sum + s.lng, 0) / sightings.length
+    
+    return [avgLat, avgLng] as [number, number]
+  }
 
   useEffect(() => {
     if (userLocation) {
       setMapCenter([userLocation.latitude, userLocation.longitude])
+      setMapBounds(undefined)
     }
   }, [userLocation])
 
   useEffect(() => {
     const fetchSightings = async () => {
-      if (!filters || !apiKey) return
+      if (!filters || !apiKey || !shouldFetchData) return
       
       setLoading(true)
       setError(null)
@@ -82,6 +188,14 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
         // Fetch notable observations using the new API structure
         const data = await ebirdApi.getNotableObservations(filters.regionCode, filters)
         setSightings(data)
+        
+        // Calculate new center and bounds based on the data
+        if (data.length > 0) {
+          const newCenter = calculateMapCenter(data)
+          const newBounds = calculateMapBounds(data)
+          setMapCenter(newCenter)
+          setMapBounds(newBounds)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch sightings')
         console.error('Error fetching sightings:', err)
@@ -91,7 +205,7 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
     }
 
     fetchSightings()
-  }, [filters, apiKey])
+  }, [filters, apiKey, shouldFetchData])
 
   const handleLocationClick = () => {
     if (navigator.geolocation) {
@@ -99,6 +213,7 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
         (position) => {
           const { latitude, longitude } = position.coords
           setMapCenter([latitude, longitude])
+          setMapBounds(undefined)
         },
         (error) => {
           console.error('Error getting location:', error)
@@ -118,6 +233,21 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
           <p className="text-muted-foreground mb-2">API Key Required</p>
           <p className="text-sm text-muted-foreground">
             Please add your eBird API key in the header to view sightings.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render map until filters are applied
+  if (!shouldFetchData) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <Bird className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground mb-2">Ready to Search</p>
+          <p className="text-sm text-muted-foreground">
+            Configure your filters and click "Apply Filters" to view bird sightings.
           </p>
         </div>
       </div>
@@ -175,14 +305,14 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
-        <MapUpdater center={mapCenter} />
+        <MapUpdater center={mapCenter} bounds={mapBounds} />
 
         {/* Bird Sightings Markers */}
         {sightings.map((sighting) => (
           <MarkerDynamic
             key={sighting.subId}
             position={[sighting.lat, sighting.lng]}
-            icon={createCustomIcon('rare')}
+            icon={createCustomIcon()}
           >
             <PopupDynamic>
               <div className="p-2 min-w-[200px]">
@@ -190,11 +320,11 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
                   <Bird className="h-5 w-5 text-primary mt-0.5" />
                   <div className="flex-1">
                     <h3 className="font-semibold text-sm">{sighting.comName}</h3>
-                    <p className="text-xs text-muted-foreground italic">{sighting.sciName}</p>
+                    <p className="text-xs text-muted-foreground italic -mt-1">{sighting.sciName}</p>
                   </div>
                 </div>
                 
-                <div className="mt-3 space-y-1 text-xs">
+                <div className="mt-2 space-y-1 text-xs">
                   <div className="flex items-center space-x-2">
                     <Calendar className="h-3 w-3" />
                     <span>{formatDate(sighting.obsDt)}</span>
@@ -228,8 +358,12 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
                   </div>
                 </div>
                 
-                <div className="mt-3 pt-2 border-t">
-                  <Button size="sm" className="w-full">
+                <div className="mt-2 pt-2 border-t">
+                  <Button 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => setSelectedSighting(sighting)}
+                  >
                     View Details
                   </Button>
                 </div>
@@ -238,6 +372,18 @@ export function BirdMap({ filters, userLocation, apiKey }: BirdMapProps) {
           </MarkerDynamic>
         ))}
       </MapContainerDynamic>
+
+      {/* Detailed Sighting Modal */}
+      {selectedSighting && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-background rounded-lg shadow-xl w-full max-w-4xl h-[90vh] overflow-hidden">
+            <DetailedSightingView 
+              sighting={selectedSighting} 
+              onClose={() => setSelectedSighting(null)} 
+            />
+          </div>
+        </div>
+      )}
 
       {/* Sightings Count */}
       <div className="absolute bottom-4 left-4 z-10">

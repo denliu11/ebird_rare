@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, MapPin, Calendar, Filter, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,22 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FilterOptions } from '@/types/ebird'
 
 interface FilterPanelProps {
-  onFiltersChange?: (filters: FilterOptions) => void
+  filters: FilterOptions
+  onFiltersChange: (filters: FilterOptions) => void
+  onApplyFilters: () => void
+  onResetFilters: () => void
 }
 
-export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
-  const [filters, setFilters] = useState<FilterOptions>({
-    regionCode: 'US',
-    back: 14,
-    detail: 'full',
-    hotspot: false,
-    sppLocale: 'en',
-  })
+export function FilterPanel({ filters, onFiltersChange, onApplyFilters, onResetFilters }: FilterPanelProps) {
+  const [localFilters, setLocalFilters] = useState<FilterOptions>(filters)
+
+  // Update local filters when props change
+  useEffect(() => {
+    setLocalFilters(filters)
+  }, [filters])
 
   const handleFilterChange = (key: keyof FilterOptions, value: any) => {
-    const newFilters = { ...filters, [key]: value }
-    setFilters(newFilters)
-    onFiltersChange?.(newFilters)
+    const newFilters = { ...localFilters, [key]: value }
+    setLocalFilters(newFilters)
+    onFiltersChange(newFilters)
   }
 
   return (
@@ -41,7 +43,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
           <Input
             id="regionCode"
             placeholder="e.g., US, US-NY, US-CA"
-            value={filters.regionCode}
+            value={localFilters.regionCode}
             onChange={(e) => handleFilterChange('regionCode', e.target.value)}
             className="pl-10"
           />
@@ -55,7 +57,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
       <div className="space-y-2">
         <Label>Days Back (1-30)</Label>
         <Select
-          value={filters.back.toString()}
+          value={localFilters.back.toString()}
           onValueChange={(value) => handleFilterChange('back', parseInt(value))}
         >
           <SelectTrigger>
@@ -75,7 +77,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
       <div className="space-y-2">
         <Label>Detail Level</Label>
         <Select
-          value={filters.detail}
+          value={localFilters.detail}
           onValueChange={(value) => handleFilterChange('detail', value)}
         >
           <SelectTrigger>
@@ -93,7 +95,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
         <input
           type="checkbox"
           id="hotspot"
-          checked={filters.hotspot}
+          checked={localFilters.hotspot}
           onChange={(e) => handleFilterChange('hotspot', e.target.checked)}
           className="rounded border-gray-300"
         />
@@ -109,7 +111,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
           min="1"
           max="10000"
           placeholder="Leave empty for all results"
-          value={filters.maxResults || ''}
+          value={localFilters.maxResults || ''}
           onChange={(e) => {
             const value = e.target.value ? parseInt(e.target.value) : undefined
             handleFilterChange('maxResults', value)
@@ -123,7 +125,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
         <Input
           id="additionalLocations"
           placeholder="Comma-separated location codes"
-          value={filters.r || ''}
+          value={localFilters.r || ''}
           onChange={(e) => handleFilterChange('r', e.target.value)}
         />
         <p className="text-xs text-muted-foreground">
@@ -135,7 +137,7 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
       <div className="space-y-2">
         <Label>Species Language</Label>
         <Select
-          value={filters.sppLocale}
+          value={localFilters.sppLocale}
           onValueChange={(value) => handleFilterChange('sppLocale', value)}
         >
           <SelectTrigger>
@@ -153,24 +155,14 @@ export function FilterPanel({ onFiltersChange }: FilterPanelProps) {
 
       {/* Action Buttons */}
       <div className="space-y-2">
-        <Button className="w-full" onClick={() => onFiltersChange?.(filters)}>
+        <Button className="w-full" onClick={onApplyFilters}>
           <Filter className="h-4 w-4 mr-2" />
           Apply Filters
         </Button>
         <Button
           variant="outline"
           className="w-full"
-          onClick={() => {
-            const defaultFilters: FilterOptions = {
-              regionCode: 'US',
-              back: 14,
-              detail: 'full',
-              hotspot: false,
-              sppLocale: 'en',
-            }
-            setFilters(defaultFilters)
-            onFiltersChange?.(defaultFilters)
-          }}
+          onClick={onResetFilters}
         >
           Reset Filters
         </Button>

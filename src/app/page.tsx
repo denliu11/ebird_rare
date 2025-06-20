@@ -100,7 +100,6 @@ export default function HomePage() {
               filters={currentFilters}
               apiKey={apiKeyState.isValid ? apiKeyState.apiKey : undefined}
               shouldFetchData={shouldFetchData}
-              onDataFetched={() => setShouldFetchData(false)}
             />
           </Suspense>
         </div>
